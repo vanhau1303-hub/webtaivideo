@@ -24,7 +24,7 @@ Cần có: Node.js 20 trở lên, Python 3 (để chạy yt-dlp), và một tron
 
 ## Dùng qua Internet (Cloudflare)
 
-Địa chỉ cố định: **https://video4urduck.vanhau1303.workers.dev**
+Địa chỉ cố định: **https://video4urduck.sickduck.workers.dev**
 
 ```
 Điện thoại / máy khác ──► Worker video4urduck (Cloudflare) ──► Cloudflare Tunnel ──► máy nhà (run.js → server.js)
