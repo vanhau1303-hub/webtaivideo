@@ -3,43 +3,89 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b0b12" />
   <title>Đăng nhập · HD Video Downloader</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
-  <style>
-    .login { max-width: 360px; margin: 12vh auto 0; text-align: center; }
-    .login form { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
-    .login input {
-      padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
-      background: var(--card); font-size: 16px; outline: none;
-    }
-    .login input:focus { border-color: var(--accent); }
-    .login .err { color: var(--err); min-height: 1.4em; font-size: 14px; }
-  </style>
+  <script>
+    try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch {}
+  </script>
 </head>
 <body>
-  <div class="wrap login">
-    <img src="icon.svg" alt="" width="48" height="48" />
-    <h1 style="font-size:22px;margin:12px 0 4px">HD Video Downloader</h1>
-    <p class="muted">Nhập mật khẩu để dùng web tải video.</p>
-    <form id="f">
-      <input id="pw" type="password" placeholder="Mật khẩu" autocomplete="current-password" required autofocus />
-      <button class="btn primary big" type="submit">Đăng nhập</button>
-      <div class="err" id="err"></div>
-    </form>
-  </div>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M6 11l6 6 6-6M5 21h14"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.6a3 3 0 0 0 4.2 4.2M9.9 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7c1.6 0 3-.4 4.3-1"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  </svg>
+  <div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+
+  <main class="login-wrap">
+    <div class="card login-card">
+      <span class="brand-logo"><svg class="i"><use href="#i-download"/></svg></span>
+      <h1>Chào mừng trở lại</h1>
+      <p class="muted">Nhập mật khẩu để dùng <b>HD Video Downloader</b>.</p>
+      <form id="f">
+        <div class="field" id="fieldPw">
+          <span class="field-icon"><svg class="i"><use href="#i-lock"/></svg></span>
+          <input id="pw" type="password" placeholder="Mật khẩu" autocomplete="current-password" required autofocus aria-label="Mật khẩu" />
+          <button type="button" class="clear-btn" id="toggle" title="Hiện mật khẩu" aria-label="Hiện mật khẩu">
+            <svg class="i"><use href="#i-eye"/></svg>
+          </button>
+        </div>
+        <button class="btn primary big" type="submit" id="go">
+          <span class="spin"></span><span class="label">Đăng nhập</span><svg class="i arrow"><use href="#i-arrow"/></svg>
+        </button>
+        <div class="err-msg" id="err" role="alert"></div>
+      </form>
+    </div>
+  </main>
+
   <script>
+    const pw = document.getElementById('pw');
+    const toggle = document.getElementById('toggle');
+    toggle.onclick = () => {
+      const show = pw.type === 'password';
+      pw.type = show ? 'text' : 'password';
+      toggle.querySelector('use').setAttribute('href', show ? '#i-eyeoff' : '#i-eye');
+      toggle.title = show ? 'Ẩn mật khẩu' : 'Hiện mật khẩu';
+      pw.focus();
+    };
     document.getElementById('f').onsubmit = async (e) => {
       e.preventDefault();
       const err = document.getElementById('err');
+      const go = document.getElementById('go');
+      const field = document.getElementById('fieldPw');
       err.textContent = '';
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ password: document.getElementById('pw').value }),
-      });
-      if (res.ok) location.href = '/';
-      else err.textContent = (await res.json().catch(() => ({}))).error || 'Lỗi đăng nhập';
+      go.disabled = true;
+      go.classList.add('loading');
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ password: pw.value }),
+        });
+        if (res.ok) {
+          go.classList.remove('loading');
+          go.classList.add('ok');
+          go.querySelector('.label').textContent = 'Vào thôi!';
+          setTimeout(() => (location.href = '/'), 250);
+          return;
+        }
+        err.textContent = (await res.json().catch(() => ({}))).error || 'Lỗi đăng nhập';
+      } catch {
+        err.textContent = 'Không kết nối được máy chủ';
+      }
+      go.disabled = false;
+      go.classList.remove('loading');
+      field.classList.remove('shake');
+      void field.offsetWidth;
+      field.classList.add('shake');
+      pw.select();
     };
   </script>
 </body>
