@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Đăng nhập · HD Video Downloader</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .login { max-width: 360px; margin: 12vh auto 0; text-align: center; }
+    .login form { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+    .login input {
+      padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--card); font-size: 16px; outline: none;
+    }
+    .login input:focus { border-color: var(--accent); }
+    .login .err { color: var(--err); min-height: 1.4em; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap login">
+    <img src="icon.svg" alt="" width="48" height="48" />
+    <h1 style="font-size:22px;margin:12px 0 4px">HD Video Downloader</h1>
+    <p class="muted">Nhập mật khẩu để dùng web tải video.</p>
+    <form id="f">
+      <input id="pw" type="password" placeholder="Mật khẩu" autocomplete="current-password" required autofocus />
+      <button class="btn primary big" type="submit">Đăng nhập</button>
+      <div class="err" id="err"></div>
+    </form>
+  </div>
+  <script>
+    document.getElementById('f').onsubmit = async (e) => {
+      e.preventDefault();
+      const err = document.getElementById('err');
+      err.textContent = '';
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: document.getElementById('pw').value }),
+      });
+      if (res.ok) location.href = '/';
+      else err.textContent = (await res.json().catch(() => ({}))).error || 'Lỗi đăng nhập';
+    };
+  </script>
+</body>
+</html>

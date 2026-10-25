@@ -11,10 +11,13 @@ import { detectYtdlp, ytdlpDownload, ytdlpVersion } from './src/ytdlp.js';
 import { hasFfmpeg } from './src/ffmpeg.js';
 import { getBrowser, browserName, closeBrowser } from './src/sniffer.js';
 import { sanitizeFilename } from './src/util.js';
+import { loadEnv } from './src/env.js';
+import { authEnabled, isAuthed, tryLogin, logoutCookie, isPrivateHost } from './src/auth.js';
 
 globalThis.DOMParser = DOMParser; // cho parser DASH
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
+loadEnv(path.join(ROOT, '.env'));
 const PUBLIC = path.join(ROOT, 'public');
 const WORK = path.join(ROOT, 'downloads');
 const PORT = Number(process.env.PORT) || 8686;
@@ -287,12 +290,39 @@ async function serveFile(req, res, job) {
   createReadStream(job.file).pipe(res);
 }
 
+// Trang/tài nguyên xem được khi chưa đăng nhập
+const PUBLIC_PATHS = new Set(['/login.html', '/style.css', '/icon.svg', '/favicon.ico', '/api/login']);
+
 const server = http.createServer(async (req, res) => {
   const { pathname } = new URL(req.url, 'http://localhost');
   try {
+    if (pathname === '/api/login' && req.method === 'POST') {
+      const { password } = await readJson(req);
+      const r = tryLogin(req, password);
+      if (!r.ok) return send(res, 401, { error: r.error });
+      res.setHeader('set-cookie', r.cookie);
+      return send(res, 200, { ok: true });
+    }
+    if (pathname === '/api/logout') {
+      res.setHeader('set-cookie', logoutCookie());
+      res.writeHead(302, { location: '/login.html' });
+      return res.end();
+    }
+    if (!PUBLIC_PATHS.has(pathname) && !isAuthed(req)) {
+      if (pathname.startsWith('/api/')) return send(res, 401, { error: 'Cần đăng nhập', login: true });
+      res.writeHead(302, { location: '/login.html' });
+      return res.end();
+    }
+
     if (!pathname.startsWith('/api/')) return await serveStatic(req, res, pathname);
 
-    if (pathname === '/api/status' && req.method === 'GET') return send(res, 200, status);
+    if (pathname === '/api/status' && req.method === 'GET') return send(res, 200, { ...status, auth: authEnabled() });
+
+    if (pathname === '/api/health' && req.method === 'GET') {
+      const active = [...jobs.values()].filter((j) => j.status === 'running' || j.status === 'queued').length;
+      const analyzing = [...analyses.values()].filter((a) => a.status === 'running').length;
+      return send(res, 200, { ok: true, active, analyzing });
+    }
 
     if (pathname === '/api/analyze' && req.method === 'POST') {
       const { url, mode } = await readJson(req);
@@ -302,6 +332,9 @@ const server = http.createServer(async (req, res) => {
         if (!/^https?:$/.test(u.protocol)) throw 0;
       } catch {
         return send(res, 400, { error: 'Link không hợp lệ. Hãy dán link bắt đầu bằng http:// hoặc https://' });
+      }
+      if (authEnabled() && isPrivateHost(u.hostname)) {
+        return send(res, 400, { error: 'Không hỗ trợ địa chỉ mạng nội bộ' });
       }
       const a = startAnalysis(u.href, ['auto', 'sniff', 'ytdlp'].includes(mode) ? mode : 'auto');
       return send(res, 200, publicAnalysis(a));

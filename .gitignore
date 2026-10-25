@@ -1,2 +1,5 @@
 node_modules/
 downloads/
+.env
+cloudflare/node_modules/
+cloudflare/.wrangler/

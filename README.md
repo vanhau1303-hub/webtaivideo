@@ -22,6 +22,30 @@ npm start
 
 Cần có: Node.js 20 trở lên, Python 3 (để chạy yt-dlp), và một trong ba trình duyệt Chrome, Edge hoặc Cốc Cốc (app dùng trình duyệt có sẵn trên máy để quét trang ở chế độ ẩn).
 
+## Dùng qua Internet (Cloudflare)
+
+Địa chỉ cố định: **https://video4urduck.vanhau1303.workers.dev**
+
+```
+Điện thoại / máy khác ──► Worker video4urduck (Cloudflare) ──► Cloudflare Tunnel ──► máy nhà (run.js → server.js)
+```
+
+- `start.bat` chạy `run.js`, và `run.js` làm các việc sau:
+  - bật `server.js`, nếu lỗi thì tự bật lại;
+  - mở Cloudflare Tunnel (link `*.trycloudflare.com` đổi mỗi lần khởi động) rồi báo link mới cho Worker;
+  - **mỗi phút kiểm tra GitHub** nhánh `main`. Có commit mới thì `git pull`, chạy `npm install` nếu thư viện thay đổi, rồi khởi động lại. Nếu đang có video tải dở thì chờ xong mới cập nhật.
+- Worker (`cloudflare/worker.js`) giữ link tunnel hiện tại trong KV và chuyển tiếp mọi request về đó. Khi máy nhà tắt, nó hiện trang "Máy chủ đang tắt".
+- Web có **mật khẩu**, đặt trong `.env` (`APP_PASSWORD`). Khi chạy ở chế độ này, web từ chối quét các địa chỉ mạng nội bộ.
+- Máy phải bật và đang chạy `start.bat` thì web mới dùng được.
+
+Cấu hình nằm trong `.env`, tạo từ `.env.example`. File này không đưa lên GitHub.
+
+Cập nhật Worker (khi sửa `cloudflare/worker.js`):
+
+```bash
+cd cloudflare && npx wrangler deploy
+```
+
 ## Cơ chế lấy video
 
 App chọn một trong ba cách. Ở chế độ **Tự động**, nó tự quyết định cách nào dùng trước.

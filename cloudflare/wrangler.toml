@@ -1,0 +1,9 @@
+name = "video4urduck"
+main = "worker.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+# Lưu link tunnel hiện tại của máy nhà
+[[kv_namespaces]]
+binding = "KV"
+id = "dc60f36d2000472d9211f2261e2e9840"

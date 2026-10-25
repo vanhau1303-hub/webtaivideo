@@ -45,6 +45,10 @@ async function api(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && data.login) {
+    location.href = '/login.html';
+    throw new Error('Cần đăng nhập');
+  }
   if (!res.ok) throw new Error(data.error || 'Lỗi ' + res.status);
   return data;
 }
@@ -338,6 +342,12 @@ api('/api/status')
     parts.push(s.ytdlp ? 'yt-dlp ' + s.ytdlpVersion : 'chưa có yt-dlp');
     parts.push(s.ffmpeg ? 'ffmpeg ✓' : 'chưa có ffmpeg');
     $('#engine').textContent = parts.join(' · ');
+    if (s.auth) {
+      const out = el('a', 'small', 'Đăng xuất');
+      out.href = '/api/logout';
+      out.style.marginLeft = '10px';
+      $('#engine').append(out);
+    }
   })
   .catch(() => ($('#engine').textContent = 'Không kết nối được server'));
 
