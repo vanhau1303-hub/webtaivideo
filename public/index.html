@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HD Video Downloader</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <div class="logo"><img src="icon.svg" alt="" width="40" height="40" /></div>
+      <h1>Tải video chất lượng cao nhất</h1>
+      <p class="sub">Dán link trang có video. Server sẽ mở trang bằng trình duyệt ẩn, bắt luồng video như Cốc Cốc, rồi tự chọn bản nét nhất.</p>
+    </header>
+
+    <form id="form" class="paste" autocomplete="off">
+      <div class="input-row">
+        <input id="url" type="url" placeholder="Dán link video vào đây…  (Ctrl + V)" required />
+        <button type="button" id="pasteBtn" class="btn ghost" title="Dán từ clipboard">Dán</button>
+        <button type="submit" id="goBtn" class="btn primary">Phân tích</button>
+      </div>
+      <div class="modes" role="radiogroup" aria-label="Cách lấy video">
+        <label><input type="radio" name="mode" value="auto" checked /><span>Tự động</span></label>
+        <label><input type="radio" name="mode" value="sniff" /><span>Quét trang (như Cốc Cốc)</span></label>
+        <label><input type="radio" name="mode" value="ytdlp" /><span>yt-dlp</span></label>
+      </div>
+    </form>
+
+    <section id="analysis" class="card" hidden></section>
+
+    <section class="downloads">
+      <div class="section-head">
+        <h2>Lượt tải</h2>
+        <span id="engine" class="muted small"></span>
+      </div>
+      <div id="jobs" class="jobs"></div>
+      <p id="noJobs" class="muted empty">Chưa có video nào. Dán link ở trên để bắt đầu.</p>
+    </section>
+  </div>
+
+  <template id="tplJob">
+    <article class="job">
+      <div class="thumb"></div>
+      <div class="job-body">
+        <div class="job-title"></div>
+        <div class="bar"><i></i></div>
+        <div class="job-meta"><span class="st"></span><span class="sp"></span></div>
+        <div class="job-warn" hidden></div>
+      </div>
+      <div class="job-actions">
+        <a class="btn primary save" hidden>Lưu file</a>
+        <button class="btn ghost cancel" hidden>Hủy</button>
+        <button class="btn ghost remove" hidden title="Xóa khỏi danh sách">✕</button>
+      </div>
+    </article>
+  </template>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
