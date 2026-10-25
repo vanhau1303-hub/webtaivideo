@@ -1,7 +1,8 @@
-// Đọc file .env (KEY=VALUE) vào process.env nếu biến chưa được đặt sẵn.
+// Đọc file .env (KEY=VALUE) vào process.env. Mặc định không ghi đè biến đã đặt sẵn;
+// override: true để giá trị trong .env luôn thắng (server đọc lại .env mỗi lần khởi động).
 import { readFileSync } from 'node:fs';
 
-export function loadEnv(file) {
+export function loadEnv(file, { override = false } = {}) {
   let text = '';
   try {
     text = readFileSync(file, 'utf8');
@@ -13,6 +14,6 @@ export function loadEnv(file) {
     if (!m || line.trim().startsWith('#')) continue;
     let v = m[2];
     if (/^(['"]).*\1$/.test(v)) v = v.slice(1, -1);
-    if (process.env[m[1]] === undefined) process.env[m[1]] = v;
+    if (override || process.env[m[1]] === undefined) process.env[m[1]] = v;
   }
 }

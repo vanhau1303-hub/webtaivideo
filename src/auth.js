@@ -6,7 +6,8 @@ const MAX_AGE = 30 * 24 * 3600; // 30 ngày
 const attempts = new Map(); // ip -> { count, until }
 
 const password = () => process.env.APP_PASSWORD || '';
-const secret = () => process.env.SESSION_SECRET || password();
+// Ghép cả mật khẩu vào khoá ký: đổi mật khẩu là mọi phiên đăng nhập cũ hết hiệu lực
+const secret = () => (process.env.SESSION_SECRET || '') + ':' + password();
 
 export const authEnabled = () => !!password();
 

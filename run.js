@@ -128,7 +128,7 @@ const fileHash = (f) => {
 };
 
 // Trạng thái của bản đang chạy — có commit mới (kéo từ GitHub hoặc commit ngay trên máy) thì khởi động lại
-const running = { head: '', lock: fileHash('package-lock.json'), run: fileHash('run.js') };
+const running = { head: '', lock: fileHash('package-lock.json'), run: fileHash('run.js'), env: fileHash('.env') };
 let pendingSince = 0;
 let checking = false;
 
@@ -145,7 +145,8 @@ async function checkUpdate() {
       if (base === local) pull = true; // GitHub mới hơn máy
       // ngược lại: máy có commit chưa push — vẫn chạy bản trên máy
     }
-    if (!pull && local === running.head) return;
+    const envChanged = fileHash('.env') !== running.env;
+    if (!pull && local === running.head && !envChanged) return;
 
     // Đợi các lượt tải/phân tích đang chạy xong (tối đa 30 phút)
     const h = await health();
@@ -159,8 +160,13 @@ async function checkUpdate() {
       log('⬇ Có bản mới trên GitHub, đang cập nhật…');
       await git('pull', '--ff-only', '--quiet', 'origin', BRANCH);
     }
-    running.head = await git('rev-parse', 'HEAD');
-    log('✓ Bản mới:', await git('log', '-1', '--format=%h %s'));
+    const head = await git('rev-parse', 'HEAD');
+    if (head !== running.head) log('✓ Bản mới:', await git('log', '-1', '--format=%h %s'));
+    running.head = head;
+    if (envChanged) {
+      running.env = fileHash('.env');
+      log('🔑 File .env thay đổi (mật khẩu / cấu hình), áp dụng lại');
+    }
     if (fileHash('package-lock.json') !== running.lock) {
       log('📦 Thư viện thay đổi, chạy npm install…');
       await exec(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--no-audit', '--no-fund'], { cwd: ROOT, shell: true });

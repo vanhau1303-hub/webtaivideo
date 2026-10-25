@@ -17,7 +17,7 @@ import { authEnabled, isAuthed, tryLogin, logoutCookie, isPrivateHost } from './
 globalThis.DOMParser = DOMParser; // cho parser DASH
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-loadEnv(path.join(ROOT, '.env'));
+loadEnv(path.join(ROOT, '.env'), { override: true });
 const PUBLIC = path.join(ROOT, 'public');
 const WORK = path.join(ROOT, 'downloads');
 const PORT = Number(process.env.PORT) || 8686;
