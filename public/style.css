@@ -1,61 +1,27 @@
 /* ============ Tokens ============ */
+/* Màu lấy từ token của Lucian UX/UI Prompt (lucian/tokens.css) để toàn trang đồng bộ với các phần tử đã chuyển sang. */
 :root {
-  --bg: #0b0b12;
-  --bg-2: #12121c;
-  --glass: rgba(255, 255, 255, 0.055);
-  --glass-strong: rgba(255, 255, 255, 0.09);
-  --line: rgba(255, 255, 255, 0.1);
-  --line-strong: rgba(255, 255, 255, 0.18);
-  --text: #f2f2f7;
-  --muted: #9a9aad;
-  --faint: #6c6c80;
-  --accent: #ff4d6d;
-  --accent-2: #ff8a3d;
-  --accent-3: #8b5cf6;
-  --grad: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
-  --grad-ring: conic-gradient(from var(--angle), #ff4d6d, #ff8a3d, #8b5cf6, #22d3ee, #ff4d6d);
-  --ok: #34d399;
-  --warn: #fbbf24;
-  --err: #fb7185;
-  --shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.6);
-  --radius: 22px;
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  color-scheme: dark;
-}
-:root[data-theme="light"] {
-  --bg: #f5f4fa;
-  --bg-2: #ffffff;
-  --glass: rgba(255, 255, 255, 0.72);
-  --glass-strong: rgba(255, 255, 255, 0.92);
-  --line: rgba(20, 20, 40, 0.09);
-  --line-strong: rgba(20, 20, 40, 0.16);
-  --text: #15151f;
-  --muted: #5f5f73;
-  --faint: #8b8b9e;
-  --warn: #b7791f;
-  --ok: #059669;
-  --err: #e11d48;
-  --shadow: 0 20px 50px -24px rgba(40, 30, 80, 0.25);
-  color-scheme: light;
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --bg: #f5f4fa;
-    --bg-2: #ffffff;
-    --glass: rgba(255, 255, 255, 0.72);
-    --glass-strong: rgba(255, 255, 255, 0.92);
-    --line: rgba(20, 20, 40, 0.09);
-    --line-strong: rgba(20, 20, 40, 0.16);
-    --text: #15151f;
-    --muted: #5f5f73;
-    --faint: #8b8b9e;
-    --warn: #b7791f;
-    --ok: #059669;
-    --err: #e11d48;
-    --shadow: 0 20px 50px -24px rgba(40, 30, 80, 0.25);
-    color-scheme: light;
-  }
+  --bg: var(--ux-page);
+  --bg-2: var(--ux-surface);
+  --glass: color-mix(in srgb, var(--ux-surface) 72%, transparent);
+  --glass-strong: var(--ux-surface);
+  --line: var(--ux-line);
+  --line-strong: var(--ux-line-2);
+  --text: var(--ux-ink);
+  --muted: var(--ux-ink-2);
+  --faint: var(--ux-ink-3);
+  --accent: var(--ux-accent);
+  --accent-2: var(--ux-accent-2);
+  --accent-3: #1FB89A;
+  --grad: var(--ux-grad);
+  --grad-ring: conic-gradient(from var(--angle), #7B61FF, #3D8BFF, #1FB89A, #7B61FF);
+  --ok: var(--ux-mint);
+  --warn: var(--ux-warn);
+  --err: var(--ux-danger);
+  --shadow: 0 24px 50px -30px var(--ux-shadow-strong);
+  --radius: 26px;
+  --ease: var(--ux-ease);
+  --spring: var(--ux-spring);
 }
 @property --angle {
   syntax: "<angle>";
@@ -65,6 +31,7 @@
 
 /* ============ Base ============ */
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
@@ -468,4 +435,33 @@ body.dragging .drop-hint { display: grid; animation: rise 0.25s var(--ease); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}
+
+/* ============ Ghép với phần tử Lucian ============ */
+.card.bare { padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
+.card.bare .u080 { max-width: 520px; margin: 0 auto; }
+#goSlot { display: flex; justify-content: center; margin-top: 6px; }
+.top-actions #themeSlot { display: flex; align-items: center; }
+.r-info .u015 { margin-top: -2px; }
+.cta-row .u004 { width: 100%; }
+.job-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.job-head .job-title { flex: 1; min-width: 0; }
+.job .qb { min-width: 0; }
+.credit { text-align: center; font-size: 12px; color: var(--faint); margin-top: 14px; }
+.credit a { color: var(--muted); }
+.paste .field .btn { height: 44px; }
+@media (max-width: 700px) {
+  .u002-btn { height: 64px; padding-left: 24px; }
+  .u002-orb { width: 48px; height: 48px; }
+  .u015-opt { padding: 12px; gap: 10px; }
+  .u015-ic { width: 36px; height: 36px; }
+}
+
+@media (max-width: 700px) {
+  .paste .field { flex-wrap: nowrap; }
+  .paste .field input { flex: 1 1 auto; min-width: 0; padding: 0 4px 0 10px; }
+  .paste .field .platform { display: none; }
+  #pasteBtn { padding: 0 12px; flex: none; }
+  #pasteBtn .label { display: none; }
+  .u004-btn { width: 100%; }
 }

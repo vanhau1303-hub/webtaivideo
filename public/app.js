@@ -1,17 +1,20 @@
+import { magneticButton, downloadButton, stretchySwitch, radioCards, dayNightSwitch, createToaster, orbitSpinner, queueBar, statusPill } from './lucian/elements.js';
+
 const $ = (s, el = document) => el.querySelector(s);
 const form = $('#form');
 const input = $('#url');
 const field = $('#field');
-const goBtn = $('#goBtn');
 const box = $('#analysis');
 const jobsEl = $('#jobs');
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const toaster = createToaster();
 
 let currentAnalysis = null;
 let pollTimer = null;
 const autoSave = new Set(); // lượt tải người dùng bấm trong phiên này -> tự lưu khi xong
 const saved = new Set();
 const lastStatus = new Map();
+const jobButtons = new Map(); // jobId -> nút tải #004 đang theo dõi lượt tải đó
 
 // ---------- tiện ích ----------
 function el(tag, cls, text) {
@@ -20,9 +23,9 @@ function el(tag, cls, text) {
   if (text != null) n.textContent = text;
   return n;
 }
-function icon(name, cls = '') {
+function icon(name) {
   const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  s.setAttribute('class', ('i ' + cls).trim());
+  s.setAttribute('class', 'i');
   const u = document.createElementNS('http://www.w3.org/2000/svg', 'use');
   u.setAttribute('href', '#i-' + name);
   s.append(u);
@@ -64,44 +67,17 @@ async function api(path, opts = {}) {
   return data;
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// ---------- hiệu ứng ----------
-// Gợn sóng khi bấm nút
-document.addEventListener('pointerdown', (e) => {
-  const b = e.target.closest('.btn');
-  if (!b || b.disabled || reduceMotion) return;
-  const r = b.getBoundingClientRect();
-  const d = Math.max(r.width, r.height);
-  const s = el('span', 'ripple');
-  Object.assign(s.style, { width: d + 'px', height: d + 'px', left: e.clientX - r.left - d / 2 + 'px', top: e.clientY - r.top - d / 2 + 'px' });
-  b.append(s);
-  setTimeout(() => s.remove(), 650);
-});
-
-function toast(text, type = '') {
-  const t = el('div', 'toast ' + type);
-  t.append(icon(type === 'ok' ? 'check' : type === 'err' ? 'alert' : 'sparkle'), el('span', '', text));
-  $('#toasts').append(t);
-  setTimeout(() => {
-    t.classList.add('out');
-    setTimeout(() => t.remove(), 320);
-  }, 3600);
-}
+const toast = (kind, title, sub, action) => toaster.push(kind, title, sub, action);
 
 function confetti(fromEl) {
-  if (reduceMotion) return;
-  const r = (fromEl || goBtn).getBoundingClientRect();
-  const colors = ['#ff4d6d', '#ff8a3d', '#8b5cf6', '#22d3ee', '#34d399', '#fbbf24'];
+  if (reduceMotion || !fromEl) return;
+  const r = fromEl.getBoundingClientRect();
+  const colors = ['#7B61FF', '#3D8BFF', '#1FB89A', '#FFB547', '#FF6B8B'];
   for (let i = 0; i < 36; i++) {
     const c = el('i', 'confetti');
     const a = Math.random() * Math.PI * 2;
     const v = 80 + Math.random() * 160;
-    Object.assign(c.style, {
-      left: r.left + r.width / 2 + 'px',
-      top: r.top + r.height / 2 + 'px',
-      background: colors[i % colors.length],
-      animationDelay: Math.random() * 0.08 + 's',
-    });
+    Object.assign(c.style, { left: r.left + r.width / 2 + 'px', top: r.top + r.height / 2 + 'px', background: colors[i % colors.length], animationDelay: Math.random() * 0.08 + 's' });
     c.style.setProperty('--dx', Math.cos(a) * v + 'px');
     c.style.setProperty('--dy', Math.sin(a) * v - 60 + 'px');
     c.style.setProperty('--rot', (Math.random() * 720 - 360).toFixed(0) + 'deg');
@@ -110,23 +86,34 @@ function confetti(fromEl) {
   }
 }
 
-// ---------- giao diện sáng / tối ----------
-$('#themeBtn').onclick = () => {
-  const root = document.documentElement;
-  const isDark = root.dataset.theme ? root.dataset.theme === 'dark' : !matchMedia('(prefers-color-scheme: light)').matches;
-  root.dataset.theme = isDark ? 'light' : 'dark';
-  try {
-    localStorage.setItem('theme', root.dataset.theme);
-  } catch {}
+// ---------- giao diện sáng / tối (#021) ----------
+const isDark = () => {
+  const t = document.documentElement.dataset.theme;
+  return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
 };
+$('#themeSlot').append(
+  dayNightSwitch({
+    night: isDark(),
+    onChange(night) {
+      document.documentElement.dataset.theme = night ? 'dark' : 'light';
+      try {
+        localStorage.setItem('theme', document.documentElement.dataset.theme);
+      } catch {}
+    },
+  }).root
+);
+
+// ---------- nút Phân tích (#002) ----------
+const go = magneticButton({ label: 'Phân tích link', done: 'Đang tìm video…' });
+$('#goSlot').append(go.root);
 
 // ---------- nhận diện trang ----------
 const PLATFORMS = [
   [/(^|\.)(youtube\.com|youtu\.be)$/, 'YouTube', '#ff3b3b'],
-  [/(^|\.)tiktok\.com$/, 'TikTok', '#25d0ee'],
+  [/(^|\.)tiktok\.com$/, 'TikTok', '#14b8c4'],
   [/(^|\.)(facebook\.com|fb\.watch)$/, 'Facebook', '#3b82f6'],
   [/(^|\.)instagram\.com$/, 'Instagram', '#e1306c'],
-  [/(^|\.)(twitter\.com|x\.com)$/, 'X', '#a1a1aa'],
+  [/(^|\.)(twitter\.com|x\.com)$/, 'X', '#71717a'],
   [/(^|\.)vimeo\.com$/, 'Vimeo', '#1ab7ea'],
   [/(^|\.)dailymotion\.com$/, 'Dailymotion', '#2b7cff'],
   [/(^|\.)(bilibili\.com|bilibili\.tv)$/, 'Bilibili', '#00a1d6'],
@@ -141,9 +128,9 @@ function detectPlatform(text) {
     return null;
   }
   if (!/^https?:$/.test(u.protocol)) return null;
-  if (/\.(m3u8|mpd|mp4|webm|mkv|mov)(\?|$)/i.test(u.pathname)) return ['Link trực tiếp', '#34d399'];
+  if (/\.(m3u8|mpd|mp4|webm|mkv|mov)(\?|$)/i.test(u.pathname)) return ['Link trực tiếp', '#119C72'];
   const p = PLATFORMS.find(([re]) => re.test(u.hostname));
-  return p ? [p[1], p[2]] : [u.hostname.replace(/^www\./, ''), '#a78bfa'];
+  return p ? [p[1], p[2]] : [u.hostname.replace(/^www\./, ''), '#6A57F2'];
 }
 function updatePlatform() {
   const p = detectPlatform(input.value);
@@ -177,7 +164,7 @@ $('#pasteBtn').onclick = async () => {
     }
   } catch {
     input.focus();
-    toast('Trình duyệt chặn đọc clipboard — hãy bấm Ctrl + V vào ô link');
+    toast('info', 'Trình duyệt chặn đọc clipboard', 'Hãy bấm Ctrl + V vào ô link');
   }
 };
 input.addEventListener('paste', () =>
@@ -187,7 +174,7 @@ input.addEventListener('paste', () =>
   }, 0)
 );
 document.addEventListener('keydown', (e) => {
-  if (e.key === '/' && document.activeElement !== input && !e.ctrlKey && !e.metaKey) {
+  if (e.key === '/' && document.activeElement !== input && !e.ctrlKey && !e.metaKey && !/input|textarea/i.test(document.activeElement?.tagName)) {
     e.preventDefault();
     input.focus();
     input.select();
@@ -215,13 +202,17 @@ document.addEventListener('drop', (e) => {
   }
 });
 
-// ---------- phân tích ----------
-const STEPS = [
-  { label: 'Nhận diện link', re: /bắt đầu|đọc link|yt-dlp|khởi động/i },
-  { label: 'Mở trang và bấm phát video', re: /mở trang|bấm phát/i },
-  { label: 'Bắt luồng video', re: /bắt được/i },
-  { label: 'Phân tích các mức chất lượng', re: /phân tích|không thấy/i },
+// ---------- phân tích (#080) ----------
+const STEP_TITLES = [
+  [/yt-dlp/i, 'Đang hỏi thông tin video'],
+  [/khởi động/i, 'Đang mở trình duyệt ẩn'],
+  [/mở trang/i, 'Đang mở trang'],
+  [/bấm phát/i, 'Đang tìm và bấm phát video'],
+  [/bắt được/i, 'Đã bắt được luồng video'],
+  [/phân tích/i, 'Đang đọc các mức chất lượng'],
+  [/đọc link/i, 'Đang đọc link trực tiếp'],
 ];
+const stepTitle = (t) => (STEP_TITLES.find(([re]) => re.test(t || '')) || [0, 'Đang chuẩn bị'])[1];
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -230,78 +221,64 @@ form.addEventListener('submit', async (e) => {
     field.classList.remove('shake');
     void field.offsetWidth;
     field.classList.add('shake');
-    toast('Link chưa hợp lệ — cần bắt đầu bằng http:// hoặc https://', 'err');
+    toast('err', 'Link chưa hợp lệ', 'Cần bắt đầu bằng http:// hoặc https://');
     return;
   }
   if (currentAnalysis && currentAnalysis.status === 'running') api('/api/analyze/' + currentAnalysis.id, { method: 'DELETE' }).catch(() => {});
-  goBtn.disabled = true;
-  goBtn.classList.add('loading');
+  go.play();
+  go.btn.disabled = true;
   field.classList.add('busy');
-  const view = showSteps();
+
+  let myId = null;
+  const spin = orbitSpinner({
+    title: 'Đang chuẩn bị',
+    sub: '0 giây',
+    cancelLabel: 'Huỷ',
+    onCancel: () => {
+      if (myId) api('/api/analyze/' + myId, { method: 'DELETE' }).catch(() => {});
+      currentAnalysis = null;
+      spin.update('Đã huỷ', 'Dán link khác để thử lại');
+      go.btn.disabled = false;
+      field.classList.remove('busy');
+    },
+  });
+  box.hidden = false;
+  box.textContent = '';
+  box.classList.add('bare');
+  box.append(spin.root);
+  const t0 = performance.now();
+  const tick = setInterval(() => spin.update(null, ((performance.now() - t0) / 1000).toFixed(1) + ' giây'), 100);
+
   try {
     let a = await api('/api/analyze', { method: 'POST', body: { url, mode: 'auto' } });
+    myId = a.id;
     currentAnalysis = a;
     while (a.status === 'running') {
-      view.update(a.statusText);
+      spin.update(stepTitle(a.statusText));
       await sleep(600);
+      if (currentAnalysis?.id !== myId) return; // đã huỷ hoặc có lượt mới
       a = await api('/api/analyze/' + a.id);
-      if (currentAnalysis.id !== a.id) return; // đã có lượt phân tích mới
       currentAnalysis = a;
     }
-    view.stop();
+    clearInterval(tick);
     if (a.status === 'error') throw new Error(a.error);
+    const n = a.result.sources.length;
+    spin.done(a.result.best ? 'Đã tìm thấy video' : 'Xong', n ? `${n} nguồn · ${((performance.now() - t0) / 1000).toFixed(1)} giây` : '');
+    await sleep(reduceMotion ? 0 : 900);
     renderResult(a);
   } catch (err) {
-    view.stop();
+    if (currentAnalysis?.id !== myId && myId) return;
     showError(err.message);
   } finally {
-    goBtn.disabled = false;
-    goBtn.classList.remove('loading');
+    clearInterval(tick);
+    go.btn.disabled = false;
     field.classList.remove('busy');
   }
 });
 
-function showSteps() {
-  box.hidden = false;
-  box.textContent = '';
-  const head = el('div', 'steps-head');
-  head.append(el('b', '', 'Đang tìm video…'));
-  const timer = el('span', 'timer', '0.0s');
-  head.append(timer);
-  const list = el('div', 'steps');
-  const nodes = STEPS.map((s) => {
-    const n = el('div', 'step');
-    const b = el('span', 'b');
-    b.append(icon('check'));
-    n.append(b, el('span', '', s.label));
-    list.append(n);
-    return n;
-  });
-  const detail = el('div', 'step-detail', 'Đang bắt đầu…');
-  const sk = el('div', 'skeleton');
-  sk.innerHTML =
-    '<div class="sk" style="aspect-ratio:16/9"></div><div class="col"><div class="sk" style="height:22px;width:80%"></div><div class="sk" style="height:16px;width:45%"></div><div class="sk" style="height:56px"></div></div>';
-  box.append(head, list, detail, sk);
-
-  let idx = 0;
-  const paint = () => nodes.forEach((n, i) => (n.className = 'step' + (i < idx ? ' done' : i === idx ? ' active' : '')));
-  paint();
-  const t0 = performance.now();
-  const tick = setInterval(() => (timer.textContent = ((performance.now() - t0) / 1000).toFixed(1) + 's'), 100);
-  return {
-    update(text) {
-      detail.textContent = text || '';
-      STEPS.forEach((s, i) => s.re.test(text || '') && i > idx && (idx = i));
-      paint();
-    },
-    stop() {
-      clearInterval(tick);
-    },
-  };
-}
-
 function showError(msg) {
   box.hidden = false;
+  box.classList.remove('bare');
   box.textContent = '';
   const c = el('div', 'err-card');
   const ic = el('div', 'ic');
@@ -317,6 +294,12 @@ function showError(msg) {
 // ---------- kết quả ----------
 const KIND_LABEL = { hls: 'HLS', dash: 'DASH', file: 'FILE', ytdlp: 'yt-dlp' };
 const VIA_LABEL = { sniff: 'Quét trang', ytdlp: 'yt-dlp', direct: 'Link trực tiếp' };
+const CODEC_GRAD = {
+  AV1: 'linear-gradient(140deg,#8B6CFF,#5B8CFF)',
+  VP9: 'linear-gradient(140deg,#22C3A6,#0EA5E9)',
+  'H.265': 'linear-gradient(140deg,#FF8A5B,#FF5B8A)',
+  'H.264': 'linear-gradient(140deg,#B5B2BD,#8E8A97)',
+};
 
 function optionText(o) {
   const parts = [o.label];
@@ -325,7 +308,6 @@ function optionText(o) {
   if (o.disabled) parts.push('(' + o.reason + ')');
   return parts.join(' — ');
 }
-
 function placeholder() {
   const p = el('div', 'thumb-ph');
   p.append(icon('film'));
@@ -335,25 +317,22 @@ function placeholder() {
 function renderResult(a) {
   const r = a.result;
   box.hidden = false;
+  box.classList.remove('bare');
   box.textContent = '';
 
   const bestSrc = r.best && r.sources.find((s) => s.id === r.best.sourceId);
   const bestOpt = bestSrc && bestSrc.options.find((o) => o.id === r.best.optionId);
 
   const grid = el('div', 'result');
-  // Ảnh bìa
   const tw = el('div', 'thumb-wrap');
   if (r.thumbnail) {
     const img = el('img');
     img.alt = '';
     img.referrerPolicy = 'no-referrer';
     img.src = r.thumbnail;
-    img.onerror = () => {
-      img.replaceWith(placeholder());
-      tw.querySelector('.play')?.remove();
-    };
     const play = el('span', 'play');
     play.append(icon('play'));
+    img.onerror = () => (img.replaceWith(placeholder()), play.remove());
     tw.append(img, play);
   } else tw.append(placeholder());
   if (r.duration) tw.append(el('span', 'dur', fmtDuration(r.duration)));
@@ -376,76 +355,99 @@ function renderResult(a) {
     return;
   }
 
-  // Chọn chất lượng
+  // Lựa chọn hiện tại
   let sel = { sourceId: bestSrc.id, optionId: bestOpt.id, transcode: false };
-  let sw = null;
+  const optOf = (s) => r.sources.find((x) => x.id === s.sourceId).options.find((x) => x.id === s.optionId);
+  let compat = null;
+
+  // Chọn chất lượng (#015)
   const lr = el('div', 'label-row');
   lr.append(el('span', '', 'Chất lượng'));
   info.append(lr);
-  const qs = el('div', 'qualities');
-  const pills = [];
-  bestSrc.options.forEach((o, i) => {
-    const q = el('button', 'q');
-    q.type = 'button';
-    q.disabled = !!o.disabled;
-    q.style.animationDelay = i * 35 + 'ms';
-    q.append(el('b', '', o.label));
-    const sub = [o.codec || (o.note || '').split(' · ')[0], o.sizeEstimate ? '~' + fmtBytes(o.sizeEstimate) : ''].filter(Boolean).join(' · ');
-    q.append(el('small', '', o.disabled ? o.reason : sub || 'Gốc'));
-    if (o.id === bestOpt.id) q.append(el('span', 'crown', 'NÉT NHẤT'));
-    q.title = optionText(o);
-    q.onclick = () => {
-      sel = { sourceId: bestSrc.id, optionId: o.id, transcode: false };
-      if (sw) sw.checked = false;
+  const cards = radioCards({
+    items: bestSrc.options.map((o) => ({
+      id: o.id,
+      title: o.label,
+      badge: o.id === bestOpt.id ? 'Nét nhất' : o.codec === 'H.264' && o.id === r.bestCompat?.optionId ? 'Mọi máy' : '',
+      sub: o.disabled ? o.reason : [o.codec, (o.note || '').split(' · ').filter((x) => x !== o.codec).join(' · ')].filter(Boolean).join(' · ') || 'Bản gốc',
+      icon: (o.codec || 'MP4').replace('H.', 'H'),
+      grad: CODEC_GRAD[o.codec] || 'linear-gradient(140deg,#7B61FF,#3D8BFF)',
+      right: o.sizeEstimate ? '~' + fmtBytes(o.sizeEstimate) : '',
+      rightSub: o.sizeEstimate ? 'ước tính' : '',
+      disabled: !!o.disabled,
+    })),
+    selected: bestOpt.id,
+    summary: (it) => [`Đã chọn ${it.title}`, it.right || ''],
+    onSelect(it) {
+      sel = { sourceId: bestSrc.id, optionId: it.id, transcode: false };
+      if (compat) compat.set(false);
       paint();
-    };
-    pills.push([q, o]);
-    qs.append(q);
+    },
   });
-  info.append(qs);
+  info.append(cards.root);
+  cards.init();
 
-  // Công tắc H.264
+  // Công tắc H.264 (#013)
   const c = r.bestCompat;
   if (c) {
     const cSrc = r.sources.find((s) => s.id === c.sourceId);
     const cOpt = cSrc.options.find((o) => o.id === c.optionId);
-    const lab = el('label', 'switch');
-    sw = el('input');
-    sw.type = 'checkbox';
-    const txt = el('span', 'txt');
-    txt.append(el('b', '', 'Tương thích mọi máy (H.264)'));
-    txt.append(
-      el(
-        'small',
-        '',
-        c.transcode
-          ? `Bản nét nhất dùng ${bestOpt.codec}. Bật để chuyển sang H.264, giữ ${cOpt.label} (lâu hơn).`
-          : `Bản nét nhất dùng ${bestOpt.codec}, TV/máy cũ có thể không phát được. Bật để tải ${cOpt.label} H.264.`
-      )
-    );
-    lab.append(sw, el('span', 'track'), txt);
-    sw.onchange = () => {
-      sel = sw.checked ? { sourceId: cSrc.id, optionId: cOpt.id, transcode: c.transcode } : { sourceId: bestSrc.id, optionId: bestOpt.id, transcode: false };
-      paint();
-    };
-    info.append(lab);
+    compat = stretchySwitch({
+      title: 'Tương thích mọi máy (H.264)',
+      offText: `Bản nét nhất dùng ${bestOpt.codec} — TV/máy cũ có thể không phát được`,
+      onText: c.transcode ? `Chuyển sang H.264, giữ ${cOpt.label} (lâu hơn)` : `Tải ${cOpt.label} H.264 có sẵn`,
+      onChange(on) {
+        if (on) {
+          sel = { sourceId: cSrc.id, optionId: cOpt.id, transcode: c.transcode };
+          if (cSrc.id === bestSrc.id && !c.transcode) cards.select(cOpt.id);
+          else cards.clear();
+        } else {
+          sel = { sourceId: bestSrc.id, optionId: bestOpt.id, transcode: false };
+          cards.select(bestOpt.id);
+        }
+        paint();
+      },
+    });
+    info.append(compat.root);
   }
 
-  // Nút tải
+  // Nút tải (#004)
+  let activeJob = null;
+  const dl = downloadButton({
+    fileName: r.title || 'video',
+    ext: 'mp4',
+    sizeText: '',
+    label: 'Tải xuống',
+    async onStart(btn) {
+      try {
+        const job = await api('/api/download', { method: 'POST', body: { analysisId: a.id, sourceId: sel.sourceId, optionId: sel.optionId, transcode: sel.transcode } });
+        activeJob = job.id;
+        autoSave.add(job.id);
+        jobButtons.set(job.id, btn);
+        toast('wait', `Bắt đầu tải ${job.quality}`, r.title || '');
+        refreshJobs();
+      } catch (e) {
+        btn.reset();
+        toast('err', 'Không bắt đầu tải được', e.message);
+      }
+    },
+    onCancel() {
+      if (activeJob) {
+        api(`/api/jobs/${activeJob}/cancel`, { method: 'POST' }).then(refreshJobs).catch(() => {});
+        jobButtons.delete(activeJob);
+        activeJob = null;
+      }
+    },
+  });
   const row = el('div', 'cta-row');
-  const btn = el('button', 'btn primary big');
-  btn.type = 'button';
-  row.append(btn);
+  row.append(dl.root);
   info.append(row);
-  btn.onclick = () => startDownload(a.id, sel.sourceId, sel.optionId, btn, sel.transcode);
 
   function paint() {
-    pills.forEach(([q, o]) => q.classList.toggle('sel', sel.sourceId === bestSrc.id && o.id === sel.optionId && !sw?.checked));
-    const s = r.sources.find((x) => x.id === sel.sourceId);
-    const o = s.options.find((x) => x.id === sel.optionId);
-    btn.textContent = '';
-    btn.append(el('span', 'spin'), icon('download', 'arrow'), el('span', 'label', `Tải ${o.label}${sw?.checked ? ' H.264' : ''}`));
-    if (o.sizeEstimate) btn.append(el('span', 'size', '· ~' + fmtBytes(o.sizeEstimate)));
+    const o = optOf(sel);
+    const label = `Tải ${o.label}${compat?.get() ? ' H.264' : ''}`;
+    dl.setInfo({ fileName: r.title || 'video', sizeText: o.sizeEstimate ? '~' + fmtBytes(o.sizeEstimate) : '', label });
+    dl.setExt(r.via === 'ytdlp' || bestSrc.kind !== 'file' ? 'mp4' : 'mp4');
   }
   paint();
 
@@ -492,37 +494,28 @@ function renderSource(analysisId, s) {
   const firstOk = s.options.find((o) => !o.disabled);
   const btn = el('button', 'btn');
   btn.type = 'button';
-  btn.append(el('span', 'spin'), icon('download'), el('span', 'label', 'Tải'));
+  btn.append(icon('save'), el('span', 'label', 'Tải'));
   if (firstOk) select.value = firstOk.id;
   else btn.disabled = true;
-  btn.onclick = () => startDownload(analysisId, s.id, select.value, btn);
+  btn.onclick = async () => {
+    btn.disabled = true;
+    try {
+      const job = await api('/api/download', { method: 'POST', body: { analysisId, sourceId: s.id, optionId: select.value } });
+      autoSave.add(job.id);
+      toast('wait', `Bắt đầu tải ${job.quality}`);
+      refreshJobs();
+    } catch (e) {
+      btn.disabled = false;
+      toast('err', 'Không bắt đầu tải được', e.message);
+    }
+  };
   row.append(select, btn);
   node.append(row);
   if (!firstOk) node.append(el('div', 'note', s.drm ? 'Nội dung có DRM — không thể tải.' : s.live ? 'Livestream — chưa hỗ trợ.' : 'Không có chất lượng nào tải được.'));
   return node;
 }
 
-async function startDownload(analysisId, sourceId, optionId, btn, transcode = false) {
-  btn.disabled = true;
-  btn.classList.add('loading');
-  try {
-    const job = await api('/api/download', { method: 'POST', body: { analysisId, sourceId, optionId, transcode } });
-    autoSave.add(job.id);
-    btn.classList.remove('loading');
-    btn.classList.add('ok');
-    btn.textContent = '';
-    btn.append(icon('check'), el('span', 'label', 'Đã thêm vào hàng chờ'));
-    toast(`Bắt đầu tải ${job.quality}`, 'ok');
-    refreshJobs();
-    setTimeout(() => $('.downloads').scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' }), 250);
-  } catch (e) {
-    btn.disabled = false;
-    btn.classList.remove('loading');
-    toast(e.message, 'err');
-  }
-}
-
-// ---------- danh sách tải ----------
+// ---------- danh sách tải (#083) ----------
 async function refreshJobs() {
   clearTimeout(pollTimer);
   let list = [];
@@ -547,6 +540,10 @@ function renderJobs(list) {
       $('.job-title', node).textContent = `${j.title} [${j.quality}]`;
       $('.job-title', node).title = j.pageUrl || '';
       if (j.thumbnail) $('.thumb', node).style.backgroundImage = `url("${j.thumbnail.replace(/"/g, '%22')}")`;
+      node._qb = queueBar();
+      $('.qb', node).append(node._qb.root);
+      node._pill = statusPill('', 'var(--ux-warn)');
+      $('.job-head', node).append(node._pill);
       $('.cancel', node).onclick = () => api(`/api/jobs/${j.id}/cancel`, { method: 'POST' }).then(refreshJobs);
       $('.remove', node).onclick = () => {
         node.classList.add('leaving');
@@ -559,57 +556,70 @@ function renderJobs(list) {
   });
 }
 
-function updateJob(node, j) {
-  const indet = j.status === 'running' && !j.progress;
-  const leaving = node.classList.contains('leaving') ? ' leaving' : '';
-  node.className = 'job ' + j.status + (j.encoding ? ' encoding' : '') + (indet ? ' indet' : '') + leaving;
-  const p = j.status === 'done' ? 1 : j.progress;
-  $('.fg', node).style.strokeDashoffset = (113.1 * (1 - p)).toFixed(1);
-  $('.pct', node).textContent = Math.floor(p * 100) + '%';
-  $('.bar > i', node).style.width = Math.floor(p * 100) + '%';
-
-  const chip = { queued: 'Đang chờ', running: j.encoding ? 'Chuyển mã' : 'Đang tải', done: 'Hoàn tất', error: 'Lỗi', canceled: 'Đã huỷ' }[j.status];
-  let st = '';
-  let sp = '';
+function jobText(j, node) {
   if (j.status === 'running' && j.encoding) {
-    st = j.statusText;
-    if (j.encodeSpeed) {
-      sp = j.encodeSpeed.toFixed(1) + '× thời gian thực';
-      if (j.progress > 0.01) sp += ' · còn ' + fmtEta(((1 - j.progress) / j.progress) * ((Date.now() - (node._encStart ||= Date.now())) / 1000));
-    }
-  } else if (j.status === 'running') {
-    st = j.statusText;
+    let sp = j.encodeSpeed ? j.encodeSpeed.toFixed(1) + '× thời gian thực' : '';
+    if (j.progress > 0.01) sp += (sp ? ' · ' : '') + 'còn ' + fmtEta(((1 - j.progress) / j.progress) * ((Date.now() - (node._encStart ||= Date.now())) / 1000));
+    return [j.statusText, sp];
+  }
+  if (j.status === 'running') {
     const parts = [fmtBytes(j.bytes) + (j.totalBytes ? ' / ' + fmtBytes(j.totalBytes) : '')];
     if (j.speed) parts.push(fmtBytes(j.speed) + '/s');
     if (j.speed && j.totalBytes > j.bytes) parts.push('còn ' + fmtEta((j.totalBytes - j.bytes) / j.speed));
     else if (j.speed && j.totalUnits && j.progress > 0.02) parts.push('còn ' + fmtEta((j.bytes / j.progress - j.bytes) / j.speed));
-    sp = parts.join(' · ');
-  } else if (j.status === 'done') {
-    sp = fmtBytes(j.size) + ' · .' + j.ext;
-  } else if (j.status === 'error') st = j.error;
-  $('.st-chip', node).textContent = chip;
-  $('.st', node).textContent = st;
-  $('.sp', node).textContent = sp;
+    return [j.statusText, parts.join(' · ')];
+  }
+  if (j.status === 'queued') return ['Đang chờ tới lượt', ''];
+  if (j.status === 'done') return ['Đã xong', fmtBytes(j.size) + ' · .' + j.ext];
+  if (j.status === 'error') return [j.error, ''];
+  return ['Đã huỷ', ''];
+}
+
+function updateJob(node, j) {
+  node.className = 'job ' + j.status + (node.classList.contains('leaving') ? ' leaving' : '');
+  const [left, right] = jobText(j, node);
+  const pct = j.status === 'running' && j.progress ? ' ' + Math.floor(j.progress * 100) + '%' : '';
+  node._qb.set(j.status === 'done' ? 'done' : j.status === 'running' ? 'run' : j.status === 'queued' ? 'queued' : 'fail', j.progress, left, right);
+  const PILL = {
+    queued: ['Đang chờ', 'var(--ux-warn)'],
+    running: [j.encoding ? 'Chuyển mã' : 'Đang tải', 'var(--ux-accent)'],
+    done: ['Hoàn tất', 'var(--ux-mint)'],
+    error: ['Lỗi', 'var(--ux-danger)'],
+    canceled: ['Đã huỷ', 'var(--ux-ink-3)'],
+  }[j.status];
+  node._pill.textContent = PILL[0] + pct;
+  node._pill.style.setProperty('--c', PILL[1]);
   const warn = $('.job-warn', node);
   warn.hidden = !j.warning;
   warn.textContent = j.warning || '';
-
   const active = j.status === 'running' || j.status === 'queued';
   $('.save', node).hidden = j.status !== 'done';
   $('.cancel', node).hidden = !active;
   $('.remove', node).hidden = active;
 
-  // Thông báo khi trạng thái đổi
+  // Nút tải lớn (#004) chạy theo lượt tải này
+  const btn = jobButtons.get(j.id);
+  if (btn) {
+    if (j.status === 'running' || j.status === 'queued') {
+      // Chữ trong nút ngắn gọn: tốc độ + thời gian còn lại
+      const short = right.split(' · ').filter((x) => /\/s$|^còn |thời gian thực/.test(x)).join(' · ');
+      btn.progress(j.progress || 0, j.status === 'queued' ? 'Đang chờ…' : short || (j.encoding ? 'Đang chuyển mã…' : 'Đang tải…'));
+    }
+    else if (j.status === 'done') btn.finish(), jobButtons.delete(j.id);
+    else btn.reset(), jobButtons.delete(j.id);
+  }
+
+  // Thông báo khi trạng thái đổi (#070)
   const prev = lastStatus.get(j.id);
   lastStatus.set(j.id, j.status);
   if (prev && prev !== j.status) {
-    if (j.status === 'done') toast(`Tải xong: ${j.title} [${j.quality}]`, 'ok');
-    else if (j.status === 'error') toast('Tải lỗi: ' + j.error, 'err');
+    if (j.status === 'done') toast('ok', 'Tải xong ' + j.quality, j.title, { label: 'Lưu', href: `/api/jobs/${j.id}/file` });
+    else if (j.status === 'error') toast('err', 'Tải lỗi', j.error);
   }
   // Tự lưu file về máy khi tải xong
   if (j.status === 'done' && autoSave.has(j.id) && !saved.has(j.id)) {
     saved.add(j.id);
-    confetti($('.ring', node));
+    confetti(node);
     $('.save', node).click();
   }
 }
