@@ -72,12 +72,11 @@ form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const url = input.value.trim();
   if (!url) return;
-  const mode = form.mode.value;
   if (currentAnalysis && currentAnalysis.status === 'running') api('/api/analyze/' + currentAnalysis.id, { method: 'DELETE' }).catch(() => {});
   goBtn.disabled = true;
   showLoading('Đang bắt đầu…');
   try {
-    let a = await api('/api/analyze', { method: 'POST', body: { url, mode } });
+    let a = await api('/api/analyze', { method: 'POST', body: { url, mode: 'auto' } });
     currentAnalysis = a;
     const started = Date.now();
     while (a.status === 'running') {
@@ -111,7 +110,7 @@ function showError(msg) {
   box.hidden = false;
   box.textContent = '';
   box.append(el('div', 'warn err', 'Không lấy được video.\n' + msg));
-  const hint = el('p', 'muted small', 'Mẹo: thử chế độ khác ở trên (Quét trang / yt-dlp), hoặc mở link trong trình duyệt xem video có phát được không.');
+  const hint = el('p', 'muted small', 'Mẹo: mở link trong trình duyệt xem video có phát được không, hoặc dán link của chính trang xem video (không phải trang danh sách).');
   box.append(hint);
 }
 

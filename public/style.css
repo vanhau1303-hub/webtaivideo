@@ -72,15 +72,6 @@ h1 { font-size: clamp(24px, 4vw, 32px); margin: 0 0 8px; letter-spacing: -.01em;
   background: var(--soft); outline: none; font-size: 16px;
 }
 .input-row input:focus { border-color: var(--accent); background: var(--card); }
-.modes { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-.modes label { cursor: pointer; }
-.modes input { position: absolute; opacity: 0; pointer-events: none; }
-.modes span {
-  display: inline-block; padding: 4px 12px; border-radius: 99px; font-size: 13px;
-  border: 1px solid var(--border); color: var(--muted);
-}
-.modes input:checked + span { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-.modes input:focus-visible + span { outline: 2px solid var(--accent); }
 
 .card {
   margin-top: 16px; background: var(--card); border: 1px solid var(--border);
