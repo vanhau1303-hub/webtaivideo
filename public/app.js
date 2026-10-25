@@ -616,11 +616,24 @@ function updateJob(node, j) {
     if (j.status === 'done') toast('ok', 'Tải xong ' + j.quality, j.title, { label: 'Lưu', href: `/api/jobs/${j.id}/file` });
     else if (j.status === 'error') toast('err', 'Tải lỗi', j.error);
   }
-  // Tự lưu file về máy khi tải xong
-  if (j.status === 'done' && autoSave.has(j.id) && !saved.has(j.id)) {
+  // Video một luồng: bắt đầu tải về máy ngay trong lúc máy nhà còn đang tải
+  if (j.stream && j.status === 'running' && autoSave.has(j.id) && !saved.has(j.id)) {
     saved.add(j.id);
+    const a = el('a');
+    a.href = `/api/jobs/${j.id}/stream`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    toast('info', 'Đang gửi file về máy', 'Nhận dần trong lúc máy chủ còn đang tải');
+  }
+  // Tự lưu file về máy khi tải xong (video phải ghép nên chưa gửi trực tiếp được)
+  if (j.status === 'done' && autoSave.has(j.id) && !node._celebrated) {
+    node._celebrated = true;
     confetti(node);
-    $('.save', node).click();
+    if (!saved.has(j.id)) {
+      saved.add(j.id);
+      $('.save', node).click();
+    }
   }
 }
 

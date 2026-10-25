@@ -44,6 +44,28 @@ export function runFfmpeg(args, { signal, onProgress } = {}) {
   });
 }
 
+/**
+ * ffmpeg dạng ống: ghi dữ liệu vào stdin, đọc kết quả từ stdout trong lúc đang chạy.
+ * Trả về { stdin, stdout, done } — done resolve khi ffmpeg thoát thành công.
+ */
+export function ffmpegPipe(args, { signal } = {}) {
+  const p = spawn(ffmpegPath, ['-hide_banner', '-loglevel', 'error', '-y', ...args], { windowsHide: true });
+  let err = '';
+  p.stderr.on('data', (d) => (err = (err + d).slice(-4000)));
+  const onAbort = () => p.kill('SIGKILL');
+  signal?.addEventListener('abort', onAbort);
+  const done = new Promise((resolve, reject) => {
+    p.on('error', reject);
+    p.on('close', (code) => {
+      signal?.removeEventListener('abort', onAbort);
+      if (signal?.aborted) return reject(signal.reason || new DOMException('Aborted', 'AbortError'));
+      code === 0 ? resolve() : reject(new Error('ffmpeg lỗi: ' + (err.trim().split('\n').pop() || 'mã ' + code)));
+    });
+  });
+  p.stdin.on('error', () => {}); // ffmpeg thoát sớm -> lỗi sẽ báo qua done
+  return { stdin: p.stdin, stdout: p.stdout, done };
+}
+
 export async function hasFfmpeg() {
   try {
     await runFfmpeg(['-version']);

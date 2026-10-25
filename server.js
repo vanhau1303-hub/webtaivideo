@@ -1,6 +1,7 @@
 // Web app: dán link -> phân tích -> tải video chất lượng cao nhất.
 import http from 'node:http';
 import { createReadStream } from 'node:fs';
+import { open } from 'node:fs/promises';
 import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -158,6 +159,7 @@ function publicJob(j) {
     encoding: !!j.encoding,
     encodeSpeed: s.encodeSpeed || 0,
     transcode: !!j.transcode,
+    stream: j.stream ? { ext: j.stream.ext, size: j.stream.size || 0 } : null,
     size: j.size || 0,
     ext: j.ext,
     created: j.created,
@@ -192,7 +194,9 @@ async function runJob(job) {
   const onStatus = (t) => (job.statusText = t);
 
   try {
-    const opts = { signal: job.ctrl.signal, onProgress, onStatus };
+    // Video một luồng: file kết quả được ghi dần, máy con nhận ngay qua /api/jobs/:id/stream
+    const onStream = (info) => (job.stream = { ...info, done: false });
+    const opts = { signal: job.ctrl.signal, onProgress, onStatus, onStream };
     const out =
       job.source.kind === 'ytdlp'
         ? await ytdlpDownload(job.source.url, job.sel.format, job.dir, opts)
@@ -202,6 +206,7 @@ async function runJob(job) {
       Object.assign(out, await transcodeH264(out.file, job.dir, { ...opts, duration: job.duration }));
       job.encoding = false;
     }
+    if (job.stream) job.stream.done = true;
     job.file = out.file;
     job.ext = out.ext;
     job.warning = out.warning;
@@ -271,6 +276,47 @@ async function serveStatic(req, res, pathname) {
     send(res, 404, { error: 'Không tìm thấy' });
   }
 }
+
+const MIME_EXT = (ext) => (ext === 'webm' ? 'video/webm' : ext === 'ts' ? 'video/mp2t' : ext === 'mkv' ? 'video/x-matroska' : 'video/mp4');
+
+/** Gửi file đang được ghi: gửi phần đã có, chờ phần mới, kết thúc khi lượt tải xong (hỏng thì cắt kết nối). */
+async function serveStream(req, res, job) {
+  for (let i = 0; i < 200 && !job.stream && (job.status === 'queued' || job.status === 'running'); i++) await sleep(300);
+  const st = job.stream;
+  if (!st) return send(res, 409, { error: 'Lượt tải này không gửi trực tiếp được, hãy chờ tải xong' });
+  const headers = {
+    'content-type': MIME_EXT(st.ext),
+    'content-disposition': contentDisposition(`${job.filename}.${st.ext}`),
+    'cache-control': 'no-store',
+    'x-accel-buffering': 'no',
+  };
+  if (st.size) headers['content-length'] = st.size; // file trực tiếp: biết trước dung lượng
+  res.writeHead(200, headers);
+  let closed = false;
+  req.on('close', () => (closed = true));
+  const fh = await open(st.file, 'r');
+  const buf = Buffer.allocUnsafe(1 << 20);
+  let pos = 0;
+  try {
+    while (!closed) {
+      const { bytesRead } = await fh.read(buf, 0, buf.length, pos);
+      if (bytesRead > 0) {
+        pos += bytesRead;
+        if (!res.write(buf.subarray(0, bytesRead))) await new Promise((r) => res.once('drain', r));
+        continue;
+      }
+      if (st.done) break;
+      if (job.status === 'error' || job.status === 'canceled') return res.destroy(); // máy con thấy tải hỏng
+      await sleep(250);
+    }
+    res.end();
+  } catch {
+    res.destroy();
+  } finally {
+    await fh.close().catch(() => {});
+  }
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function serveFile(req, res, job) {
   const name = `${job.filename}.${job.ext}`;
@@ -364,10 +410,11 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, [...jobs.values()].sort((a, b) => b.created - a.created).map(publicJob));
     }
 
-    m = /^\/api\/jobs\/([\w]+)(\/file|\/cancel)?$/.exec(pathname);
+    m = /^\/api\/jobs\/([\w]+)(\/file|\/stream|\/cancel)?$/.exec(pathname);
     if (m) {
       const job = jobs.get(m[1]);
       if (!job) return send(res, 404, { error: 'Không tìm thấy lượt tải' });
+      if (m[2] === '/stream') return await serveStream(req, res, job);
       if (m[2] === '/file') {
         if (job.status !== 'done') return send(res, 409, { error: 'File chưa sẵn sàng' });
         return await serveFile(req, res, job);

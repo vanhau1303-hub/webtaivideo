@@ -4,7 +4,7 @@ import { rm, stat, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { buildPlan } from './analyze.js';
 import { fetchBytes, streamFile } from './net.js';
-import { runFfmpeg } from './ffmpeg.js';
+import { runFfmpeg, ffmpegPipe } from './ffmpeg.js';
 
 const CONCURRENCY = 8;
 const WINDOW = 32; // số segment tối đa nằm chờ trong RAM để ghi đúng thứ tự
@@ -47,9 +47,11 @@ function extFromFile(url, contentType) {
 /**
  * Tải theo kế hoạch vào thư mục workDir.
  * job: { source: {url, kind, headers}, sel }
+ * onStream({ file, ext, size }): gọi khi video chỉ có một luồng và file kết quả bắt đầu được ghi dần —
+ *   khi đó máy con có thể nhận file ngay trong lúc đang tải (xem /api/jobs/:id/stream).
  * Trả về { file, ext } (đường dẫn file cuối cùng)
  */
-export async function runDownload(job, workDir, { signal, onProgress, onStatus }) {
+export async function runDownload(job, workDir, { signal, onProgress, onStatus, onStream }) {
   const { source, sel } = job;
   const headers = source.headers || {};
   onStatus?.('Đang đọc manifest…');
@@ -62,8 +64,8 @@ export async function runDownload(job, workDir, { signal, onProgress, onStatus }
   // ---- File trực tiếp ----
   if (plan.tracks[0].kind === 'file') {
     const t = plan.tracks[0];
-    const tmp = path.join(workDir, 'file.part');
-    const w = openWriter(tmp);
+    const out = path.join(workDir, 'output.stream');
+    const w = openWriter(out);
     let ct = '';
     onStatus?.('Đang tải…');
     try {
@@ -73,6 +75,7 @@ export async function runDownload(job, workDir, { signal, onProgress, onStatus }
         onTotal: (total, type) => {
           stats.totalBytes = total;
           ct = type;
+          onStream?.({ file: out, ext: extFromFile(t.url, ct), size: total || 0 });
         },
         onChunk: async (u8) => {
           await w.write(u8);
@@ -85,10 +88,7 @@ export async function runDownload(job, workDir, { signal, onProgress, onStatus }
       w.destroy();
       throw e;
     }
-    const ext = extFromFile(t.url, ct);
-    const out = path.join(workDir, 'output.' + ext);
-    await rename(tmp, out);
-    return { file: out, ext };
+    return { file: out, ext: extFromFile(t.url, ct), streamed: true };
   }
 
   // ---- HLS / DASH ----
@@ -123,6 +123,12 @@ export async function runDownload(job, workDir, { signal, onProgress, onStatus }
     return data;
   };
 
+  // ---- Một luồng duy nhất: ghi thẳng ra file kết quả để máy con nhận dần ----
+  const single = plan.tracks.length === 1 ? plan.tracks[0] : null;
+  if (single && onStream && !job.transcode && ['ts', 'fmp4', 'webm'].includes(single.kind)) {
+    return await downloadStreaming(single, workDir, { fetchItem, stats, report, signal, onStatus, onStream });
+  }
+
   const trackFiles = [];
   for (let ti = 0; ti < plan.tracks.length; ti++) {
     const track = plan.tracks[ti];
@@ -152,6 +158,61 @@ export async function runDownload(job, workDir, { signal, onProgress, onStatus }
   }
 
   return await finalize(trackFiles, workDir, { signal, onStatus });
+}
+
+/**
+ * fMP4/WebM: nối thẳng các đoạn (đã là định dạng phát được).
+ * TS: đưa qua ffmpeg đổi sang MP4 phân mảnh ngay trong lúc tải (copy stream, không nén lại).
+ */
+async function downloadStreaming(track, workDir, { fetchItem, stats, report, signal, onStatus, onStream }) {
+  const out = path.join(workDir, 'output.stream');
+  const w = openWriter(out);
+  const ext = track.kind === 'webm' ? 'webm' : 'mp4';
+  const items = [];
+  if (track.init) items.push(track.init);
+  items.push(...track.segments);
+  onStatus?.('Đang tải…');
+
+  let ff = null;
+  let pump = null;
+  if (track.kind === 'ts') {
+    ff = ffmpegPipe(
+      ['-f', 'mpegts', '-i', 'pipe:0', '-map', '0:v?', '-map', '0:a?', '-c', 'copy', '-bsf:a', 'aac_adtstoasc', '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof', 'pipe:1'],
+      { signal }
+    );
+    pump = (async () => {
+      for await (const chunk of ff.stdout) await w.write(chunk);
+    })();
+  }
+  onStream({ file: out, ext, size: 0 });
+
+  const toFf = (u8) =>
+    new Promise((resolve, reject) => {
+      if (ff.stdin.destroyed) return reject(new Error('ffmpeg đã dừng'));
+      ff.stdin.write(u8, (e) => (e ? reject(e) : resolve()));
+    });
+  try {
+    await downloadOrdered(
+      items,
+      (it) => fetchItem(it, track.kind),
+      async (u8) => {
+        await (ff ? toFf(u8) : w.write(u8));
+        stats.doneUnits++;
+        report();
+      },
+      signal
+    );
+    if (ff) {
+      ff.stdin.end();
+      await Promise.all([ff.done, pump]);
+    }
+    await w.close();
+  } catch (e) {
+    if (ff) ff.stdin.destroy();
+    w.destroy();
+    throw e;
+  }
+  return { file: out, ext, streamed: true };
 }
 
 /** Ghép/đổi container bằng ffmpeg (copy stream, không nén lại → giữ nguyên chất lượng) */
